@@ -18,8 +18,22 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+
+  pre-check:
+    runs-on: ubuntu-latest
+
+    steps:
+    
+      - name: Debug Secret
+        run: echo "OpenWeather API Key is set"
+        env:
+          OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+        if: ${{ secrets.OPENWEATHER_API_KEY != '' }}
+
   prepare:
     runs-on: ubuntu-latest
+        
+    needs: pre-check
 
     steps:
 
@@ -39,13 +53,12 @@ jobs:
           path: ./
           
   deploy:
+    runs-on: ubuntu-latest
     
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    
-    runs-on: ubuntu-latest
-    
+        
     needs: prepare
     
     steps:

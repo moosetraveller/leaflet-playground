@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaflet Example using Weather API</title>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+
+    <script src="leaflet-pin.js"></script>
+    <script src="leaflet-progress.js"></script>
+
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js" as="script">
+    <link rel="preload" href="color-code-worker.js" as="script">
+    <link rel="preload" href="natgeo-style-worker.js" as="script">
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+
+    <style>
+        body {
+            margin: 0;
+        }
+
+        #map {
+            height: 100vh;
+            width: 100vw;
+        }
+
+        .leaflet-popup-content table {
+            border-collapse: collapse;
+        }
+
+        .leaflet-popup-content table td:first-of-type {
+            font-weight: bold;
+            padding-right: 1rem;
+        }
+
+        .leaflet-popup-content .popup-title {
+            font-size: larger; 
+            font-weight: bold;
+        }
+
+        .leaflet-popup-content .popup-sub-title {
+            margin-bottom: 0.5rem;
+        }
+    </style>
+
+</head>
+<body>
+    
+    <div id="map"></div>
+
+    <script>
+
+        const key = '<OpenWeatherAPI_Key>';
+
+        const colors = ['#e12729','#f37324','#f8cc1b','#72b043','#007f4e'];
+
+        const map = L.map('map', {
+            zoomSnap: 0.5,
+            zoomDelta: 0.5,
+        })
+            .setView([47.37682676381562, 8.538086139942175], 15);
+
+        map.attributionControl 
+            .setPrefix('<a href="https://leafletjs.com/">Leaflet</a>');
+
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        }).addTo(map);
+
+        let marker = null;
+
+        async function retrieveWeatherData(q) {
+            return await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${q}&appid=${key}&units=metric`);
+        }
+
+        async function showWeatherData(capital, canton) {
+
+            marker?.remove();
+
+            let response = await retrieveWeatherData(`${capital}, ${canton}, Switzerland`);
+
+            if (response.status == 404) {
+                // let's try without including the canton if not found
+                response = await retrieveWeatherData(`${capital}, Switzerland`);
+            }
+
+            const data = await response.json();
+
+            const popupContent = `
+                <div class="popup-title">
+                    Weather in ${capital}
+                </div>
+                <div class="popup-sub-title">Canton ${canton}</div>
+                <table>
+                    <tr>
+                        <td>Condition</td> 
+                        <td>${data.weather[0].main}</td>
+                    </tr>
+                    <tr>
+                        <td>Temperature</td>
+                        <td>${data.main.temp} °C</td>
+                    </tr>
+                    <tr>
+                        <td>Humidity</td>
+                        <td>${data.main.humidity} %</td>
+                    </tr>
+                    <tr>
+                        <td>Wind</td>
+                        <td>${data.wind.speed} km/h</td>
+                    </tr>
+                </table>
+            `;
+
+            marker = L.pinIconMarker([data.coord.lat, data.coord.lon], {
+                color: '#cd5b45',
+            }).addTo(map);
+
+            marker
+                .bindPopup(popupContent)
+                .openPopup()
+                .on('popupclose', () => {
+                    marker?.remove();
+                });
+
+        }
+        
+        const progressControl = L.control.progress({ position: 'topright' }).addTo(map);
+
+        fetch('https://raw.githubusercontent.com/moosetraveller/data/main/cantons.min.geojson')
+            .then(response => response.json())
+            .then(data => {
+                
+                const boundaries = L.geoJSON(null, {
+                    style: (feature) => {
+                        return {
+                            color: '#ffffff',
+                            weight: 0,
+                            fillOpacity: 0.4,
+                            fillColor: feature.properties.color ?? colors[0],
+                            className: 'canton-boundary-polygon',
+                        };
+                    },
+                }).addTo(map);
+
+                const cantons = L.geoJSON(data, {
+                    onEachFeature: (feature, layer) => {
+                        layer.on('click', event => {
+                            const feature = event.sourceTarget?.feature;
+                            const properties = feature?.properties;
+                            if (properties) {
+                                showWeatherData(properties.capital, properties.name);
+                            }
+                        });
+                        layer.on('mouseover', () => {
+                            layer.setStyle({
+                                fillOpacity: 0.3,
+                            });
+                        });
+                        layer.on('mouseout', () => {
+                            layer.setStyle({
+                                fillOpacity: 0.1,
+                            });
+                        });
+                        layer.on('add', () => {
+                            layer.getElement?.()?.setAttribute('id', feature.properties.id);
+                        });
+                    },
+                    style: (feature) => {
+                        return {
+                            color: '#000000',
+                            weight: 1,
+                            fillOpacity: 0.1,
+                            fillColor: feature.properties.color ?? colors[0],
+                            className: 'canton-polygon',
+                        };
+                    },
+                }).addTo(map);
+
+                calculateColors(data, cantons, boundaries);
+
+                map.fitBounds(cantons.getBounds());
+
+            });
+
+        function calculateColors(geojson, cantons, boundaries) {
+
+            const worker = new Worker('color-code-worker.js');
+            worker.postMessage({
+                geojson, 
+                colors,
+                randomized: true,
+            });
+
+            progressControl.reset({
+                show: true,
+                label: 'Calculate Colors applying the Five Color Theorem',
+            });
+
+            worker.onmessage = (event) => {
+                
+                const data = event.data;
+
+                if (data.result) {
+                    
+                    cantons.clearLayers();
+                    cantons.addData(data.result);
+                    progressControl.hide();
+
+                    calculateBoundaryAreas(data.result, boundaries)
+                        .then(() => {
+                            cantons.bringToFront();
+                        });
+
+                }
+                else {
+                    const value = 100 / data.totalSteps * data.step;
+                    progressControl.setValue(value);
+                }
+
+            };
+
+        }
+
+        async function calculateBoundaryAreas(geojson, boundaries) {
+
+            const worker = new Worker('natgeo-style-worker.js');
+            worker.postMessage({
+                geojson, 
+                bufferRadius: 1.25, 
+                unit: 'kilometers',
+            });
+
+            progressControl.reset({
+                show: true,
+                label: 'Create National Geographic Style Boundaries',
+            });
+
+            return new Promise((resolve, reject) => {
+
+                worker.onmessage = (event) => {
+                    
+                    const data = event.data;
+
+                    if (data.result) {
+                        boundaries.clearLayers();
+                        boundaries.addData(data.result);
+                        progressControl.hide();
+                        resolve();
+                    }
+                    else {
+                        const value = 100 / data.totalSteps * data.step;
+                        progressControl.setValue(value);
+                    }
+
+                };
+
+            });;
+
+        }
+
+    </script>
+
+</body>
+</html>

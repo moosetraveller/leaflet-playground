@@ -166,7 +166,8 @@
                             });
                         });
                         layer.on('add', () => {
-                            layer.getElement?.()?.setAttribute('id', feature.properties.id);
+                            layer.getElement?.()?.setAttribute('data-id', feature.properties.id);
+                            layer.getElement?.()?.setAttribute('data-name', feature.properties.name);
                         });
                     },
                     style: (feature) => {
@@ -205,7 +206,8 @@
                 const data = event.data;
 
                 if (data.result) {
-                    
+
+                    // redraw layer
                     cantons.clearLayers();
                     cantons.addData(data.result);
                     progressControl.hide();
@@ -246,7 +248,7 @@
                     const data = event.data;
 
                     if (data.result) {
-                        boundaries.clearLayers();
+                        // boundaries.clearLayers();
                         boundaries.addData(data.result);
                         progressControl.hide();
                         resolve();

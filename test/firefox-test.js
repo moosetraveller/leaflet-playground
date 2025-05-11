@@ -2,7 +2,7 @@
  * Test to check if the marker is displayed at the correct location
  * when a canton is clicked on the map.
  * 
- * This test was written to answer a question on StackOverflow:
+ * This test was written to investigate a question on StackOverflow:
  * https://stackoverflow.com/q/79601421/42659
  */
 

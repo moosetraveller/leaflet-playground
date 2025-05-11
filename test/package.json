@@ -7,7 +7,6 @@
     "leaflet",
     "playgound"
   ],
-  "license": "ISC",
   "author": "Thomas Zuberbuehler",
   "type": "commonjs",
   "main": "firefox-test.js",
